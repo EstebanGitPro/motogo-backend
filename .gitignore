@@ -1,0 +1,7 @@
+*.log
+.env
+docs/
+config/local-config.json
+.vscode/
+resend_key.tex   
+config/railway-config.json

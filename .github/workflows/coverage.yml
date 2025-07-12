@@ -1,0 +1,55 @@
+name: Go Coverage Check
+
+on:
+  pull_request:
+    branches:
+      - '*'
+
+jobs:
+  check-coverage:
+    runs-on: ubuntu-latest
+
+    env:
+      ALLOW_ZERO_COVERAGE: true  # Set to false when coverage enforcement is needed
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.23'
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p coverage
+          go test -coverprofile=coverage/profile.cov ./... || true  # Allow failure if no tests
+
+      - name: Check coverage threshold
+        env:
+          ALLOW_ZERO_COVERAGE: ${{ env.ALLOW_ZERO_COVERAGE }}
+        run: |
+          if [ -f coverage/profile.cov ]; then
+            COVERAGE=$(go tool cover -func=coverage/profile.cov | grep total | awk '{print $3}' | sed 's/%//')
+            echo "Coverage is $COVERAGE%"
+            if (( $(echo "$COVERAGE < 80" | bc -l) )) && [ "$ALLOW_ZERO_COVERAGE" != "true" ]; then
+              echo "Coverage is below 80%. Merge is not allowed."
+              exit 1
+            else
+              echo "Coverage check passed (bypass allowed = $ALLOW_ZERO_COVERAGE)."
+            fi
+          else
+            echo "No coverage file found."
+            if [ "$ALLOW_ZERO_COVERAGE" != "true" ]; then
+              echo "Merge is not allowed without coverage."
+              exit 1
+            else
+              echo "Bypassing coverage check (no file found, bypass allowed)."
+            fi
+          fi

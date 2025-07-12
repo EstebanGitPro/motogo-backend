@@ -1,0 +1,185 @@
+package api
+
+import (
+	"fmt"
+	"html/template"
+	"net/http"
+
+	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
+	"github.com/gin-gonic/gin"
+)
+
+type handler struct {
+	service domain.Service
+}
+
+func New(service domain.Service) *handler {
+	return &handler{
+		service: service,
+	}
+}
+
+func (h handler) GetPersonByEmail() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		email := c.Param("email")
+
+		person, err := h.service.GetPersonByEmail(email)
+		if err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, person)
+	}
+}
+
+func (h handler) GetByID() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+
+		person, err := h.service.GetByID(id)
+		if err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, person)
+	}
+}
+
+func (h handler) Save() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var personRequest PersonRequest
+		if err := c.ShouldBindJSON(&personRequest); err != nil {
+			h.HandleError(c, ErrInvalidJSONFormat)
+			return
+		}
+
+		person, err := h.service.Save(personRequest.ToDomain())
+		if err != nil {
+			h.HandleError(c, domain.ErrUserCannotSave)
+			return
+		}
+
+		response := PersonResponse{
+			ID:                  person.ID,
+			IdentityNumber:      person.IdentityNumber,
+			FirstName:           person.FirstName,
+			LastName:            person.LastName,
+			SecondLastName:      person.SecondLastName,
+			Email:               person.Email,
+			PhoneNumber:         person.PhoneNumber,
+			EmailVerified:       person.EmailVerified,
+			PhoneNumberVerified: person.PhoneNumberVerified,
+			Role:                person.Role,
+		}
+		c.JSON(http.StatusCreated, response)
+	}
+}
+
+func (h handler) VerifyEmail() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		token := c.Param("token")
+		if token == "" {
+			h.HandleError(c, ErrInvalidToken)
+			return
+		}
+
+		//TODO: Validate token length or format
+		if len(token) < 20 {
+			h.HandleError(c, ErrInvalidToken)
+			return
+		}
+
+		err := h.service.VerifyEmailByToken(token)
+		if err != nil {
+			h.handleEmailVerificationError(c, err)
+			return
+		}
+
+		data := ResponseEmail{
+			Titulo:    "Bienvenido a MotoGo",
+			Contenido: template.HTML(`<p>Tu correo ha sido verificado exitosamente. Ahora puedes disfrutar de todas las funcionalidades.</p>`),
+		}
+
+		c.HTML(http.StatusOK, "response.html", data)
+	}
+}
+
+func (h handler) CheckEmailStatus() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		email := c.Query("email")
+		if email == "" {
+			h.HandleError(c, domain.ErrorEmailNotVerified)
+			return
+		}
+
+		person, err := h.service.GetPersonByEmail(email)
+		if err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		response := PersonEmailVerifiedResponse{
+			EmailVerified: person.EmailVerified,
+		}
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func (h handler) renderErrorPage(c *gin.Context, titulo, contenido string) {
+	data := ResponseEmail{
+		Titulo:    titulo,
+		Contenido: template.HTML(fmt.Sprintf("<p>%s</p>", contenido)),
+	}
+
+	c.HTML(http.StatusBadRequest, "response.html", data)
+}
+
+func (h handler) handleEmailVerificationError(c *gin.Context, err error) {
+	switch err {
+	case domain.ErrTokenExpired:
+		h.renderErrorPage(c, "Token Expirado",
+			"El enlace de verificación ha expirado. Por favor, solicita uno nuevo.")
+	case domain.ErrTokenAlreadyUsed:
+		h.renderErrorPage(c, "Token Ya Utilizado",
+			"Este enlace ya ha sido utilizado anteriormente.")
+	case domain.ErrTokenNotFound:
+		h.renderErrorPage(c, "Token no válido",
+			"El enlace de verificación no es válido.")
+	default:
+		h.HandleError(c, ErrValidationUser)
+	}
+}
+
+// func (h handler) Login() func(c *gin.Context) {
+// 	return func(c *gin.Context) {
+// 		var personLogin PersonLogin
+// 		if err := c.ShouldBindJSON(&personLogin); err != nil {
+// 			h.HandleError(c, ErrInvalidJSONFormat)
+// 			return
+// 		}
+
+// 		person, token, err := h.service.Login(personLogin.ToDomain())
+// 		if err != nil {
+// 			h.HandleError(c, ErrValidationUser)
+// 			return
+// 		}
+
+// 		response := LoginResponse{
+// 			ID:                  person.ID,
+// 			IdentityNumber:      person.IdentityNumber,
+// 			FirstName:           person.FirstName,
+// 			LastName:            person.LastName,
+// 			SecondLastName:      person.SecondLastName,
+// 			Email:               person.Email,
+// 			PhoneNumber:         person.PhoneNumber,
+// 			EmailVerified:       person.EmailVerified,
+// 			PhoneNumberVerified: person.PhoneNumberVerified,
+// 			Role:                person.Role,
+// 			Token:               token,
+// 		}
+
+// 		c.JSON(http.StatusOK, response)
+// 	}
+// }

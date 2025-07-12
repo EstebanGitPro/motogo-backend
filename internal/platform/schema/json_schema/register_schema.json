@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "properties": {
+    "identity_number": {
+      "type": "string",
+      "description": "Identity document number (ID card, passport, DNI, etc.)",
+      "maxLength": 10,
+      "minLength": 1
+    },
+    "first_name": {
+      "type": "string",
+      "description": "First name of the person",
+      "maxLength": 120,
+      "minLength": 1
+    },
+    "last_name": {
+      "type": "string",
+      "description": "Last name of the person",
+      "maxLength": 120,
+      "minLength": 1
+    },
+    "second_last_name": {
+      "type": "string",
+      "description": "Second last name of the person",
+      "maxLength": 120
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Email address",
+      "maxLength": 250
+    },
+    "phone_number": {
+      "type": "string",
+      "description": "Cell phone number",
+      "pattern": "^[0-9]{10}$"
+    },
+    "email_verified": {
+      "type": "boolean",
+      "description": "Indicates if the email has been confirmed",
+      "default": false
+    },
+    "phone_number_verified": {
+      "type": "boolean",
+      "description": "Indicates if the cell phone number has been confirmed",
+      "default": false
+    },
+    "password": {
+      "type": "string",
+      "description": "Access password",
+      "minLength": 8,
+      "maxLength": 50
+    },
+    "role": {
+      "type": "string",
+      "description": "Role of the person in the system",
+      "maxLength": 20,
+      "minLength": 1
+    }
+  },
+  "required": [
+    "identity_number",
+    "first_name",
+    "last_name",
+    "email",
+    "phone_number",
+    "password",
+    "role"
+  ],
+  "additionalProperties": false
+}
