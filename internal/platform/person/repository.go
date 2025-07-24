@@ -48,56 +48,6 @@ func NewRepository(db *sql.DB) domain.Repository {
 	}
 }
 
-func (r *repository) MarkEmailAsVerifiedTx(tx *sql.Tx, userID string) error {
-	stmt, err := tx.Prepare(queryUpdateEmailVerified)
-	if err != nil {
-
-		return domain.ErrUserCannotUpdateEmailVerified
-	}
-	defer stmt.Close()
-
-	result, err := stmt.Exec(userID)
-	if err != nil {
-
-		return domain.ErrUserCannotUpdateEmailVerified
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return domain.ErrUserCannotFound
-	}
-
-	return nil
-}
-
-func (r *repository) MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error {
-	stmt, err := tx.Prepare(queryMarkTokenAsUsed)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	result, err := stmt.Exec(tokenID)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
-		return domain.ErrTokenNotFound
-	}
-
-	return nil
-}
-
 func (r *repository) BeginTx() (*sql.Tx, error) {
 	return r.db.Begin()
 }
@@ -113,78 +63,41 @@ func (r *repository) CleanupExpiredTokens() error {
 	if err != nil {
 		return domain.ErrCleanupExpiredTokens
 	}
-
 	return nil
 }
 
-func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
-	stmt, err := r.db.Prepare(queryTokenVerificationByHash)
+func (r *repository) GetByID(id string) (*domain.Person, error) {
+	log.Printf("GetByID received ID: '%s'", id)
+	stmt, err := r.db.Prepare(queryGetByID)
 	if err != nil {
-		return domain.ErrGetVerificationToken
+		log.Printf("Error preparing queryGetByID: %v", err)
+		return nil, domain.ErrGetUsers
 	}
 	defer stmt.Close()
 
-	var token domain.EmailVerificationToken
-
-	err = stmt.QueryRow(hashedToken).Scan(&token.ID, &token.UserID, &token.Token, &token.ExpiresAt, &token.Used, &token.CreatedAt)
+	var person Person
+	err = stmt.QueryRow(id).Scan(
+		&person.ID,
+		&person.IdentityNumber,
+		&person.FirstName,
+		&person.LastName,
+		&person.SecondLastName,
+		&person.Email,
+		&person.PhoneNumber,
+		&person.EmailVerified,
+		&person.PhoneNumberVerified,
+		&person.Role,
+	)
 	if err != nil {
+		log.Printf("Error executing query or scanning row for ID '%s': %v", id, err)
 		if err == sql.ErrNoRows {
-			return domain.ErrVerificationTokenNotFound
+			return nil, domain.ErrUserCannotFound
 		}
-		return domain.ErrGetVerificationToken
+		return nil, domain.ErrUserCannotGet
 	}
 
-	if time.Now().After(token.ExpiresAt) {
-		return domain.ErrTokenExpired
-	}
-	if token.Used {
-		return domain.ErrTokenAlreadyUsed
-	}
-
-	tx, err := r.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-
-	
-	rollbackWithLog := func(err error) error {
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("Error durante rollback: %v (error original: %v)", rbErr, err)
-			
-		} else {
-			log.Printf("Rollback exitoso después de error: %v", err)
-		}
-		return err
-	}
-
-	if err := r.MarkTokenAsUsedTx(tx, token.ID); err != nil {
-		return rollbackWithLog(err)
-	}
-
-	if err := r.MarkEmailAsVerifiedTx(tx, token.UserID); err != nil {
-		return rollbackWithLog(err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return rollbackWithLog(err)
-	}
-
-	return nil
-}
-
-func (r *repository) SaveVerificationToken(token *domain.EmailVerificationToken) error {
-	stmt, err := r.db.Prepare(querySaveVerificationToken)
-	if err != nil {
-		return domain.ErrUserCannotSaveVerificationToken
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(token.ID, token.UserID, token.Token, token.ExpiresAt)
-	if err != nil {
-		return domain.ErrUserCannotSaveVerificationToken
-	}
-
-	return nil
+	personDomain := person.ToDomain()
+	return &personDomain, nil
 }
 
 func (r *repository) GetByIdentityNumber(identityNumber string) (*domain.Person, error) {
@@ -250,42 +163,115 @@ func (r *repository) GetPersonByEmail(email string) (*domain.Person, error) {
 	return &personDomain, nil
 }
 
-func (r *repository) GetByID(id string) (*domain.Person, error) {
-	log.Printf("GetByID received ID: '%s'", id)
-	stmt, err := r.db.Prepare(queryGetByID)
+func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
+	stmt, err := r.db.Prepare(queryTokenVerificationByHash)
 	if err != nil {
-		log.Printf("Error preparing queryGetByID: %v", err)
-		return nil, domain.ErrGetUsers
+		return domain.ErrGetVerificationToken
 	}
 	defer stmt.Close()
 
-	var person Person
-	err = stmt.QueryRow(id).Scan(
-		&person.ID,
-		&person.IdentityNumber,
-		&person.FirstName,
-		&person.LastName,
-		&person.SecondLastName,
-		&person.Email,
-		&person.PhoneNumber,
-		&person.EmailVerified,
-		&person.PhoneNumberVerified,
-		&person.Role,
+	var token domain.EmailVerificationToken
+
+	err = stmt.QueryRow(hashedToken).Scan(
+		&token.ID,
+		&token.UserID,
+		&token.Token,
+		&token.ExpiresAt,
+		&token.Used,
+		&token.CreatedAt,
 	)
 	if err != nil {
-		log.Printf("Error executing query or scanning row for ID '%s': %v", id, err)
 		if err == sql.ErrNoRows {
-			return nil, domain.ErrUserCannotFound
+			return domain.ErrVerificationTokenNotFound
 		}
-		return nil, domain.ErrUserCannotGet
+		return domain.ErrGetVerificationToken
 	}
 
-	personDomain := person.ToDomain()
-	return &personDomain, nil
+	if time.Now().After(token.ExpiresAt) {
+		return domain.ErrTokenExpired
+	}
+	if token.Used {
+		return domain.ErrTokenAlreadyUsed
+	}
+
+	tx, err := r.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	rollbackWithLog := func(err error) error {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("Error durante rollback: %v (error original: %v)", rbErr, err)
+		} else {
+			log.Printf("Rollback exitoso después de error: %v", err)
+		}
+		return err
+	}
+
+	if err := r.MarkTokenAsUsedTx(tx, token.ID); err != nil {
+		return rollbackWithLog(err)
+	}
+
+	if err := r.MarkEmailAsVerifiedTx(tx, token.UserID); err != nil {
+		return rollbackWithLog(err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return rollbackWithLog(err)
+	}
+
+	return nil
+}
+
+func (r *repository) MarkEmailAsVerifiedTx(tx *sql.Tx, userID string) error {
+	stmt, err := tx.Prepare(queryUpdateEmailVerified)
+	if err != nil {
+		return domain.ErrUserCannotUpdateEmailVerified
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(userID)
+	if err != nil {
+		return domain.ErrUserCannotUpdateEmailVerified
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrUserCannotFound
+	}
+
+	return nil
+}
+
+func (r *repository) MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error {
+	stmt, err := tx.Prepare(queryMarkTokenAsUsed)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(tokenID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrTokenNotFound
+	}
+
+	return nil
 }
 
 func (r *repository) Save(person domain.Person) error {
-
 	personToSave := Person{
 		ID:                  person.ID,
 		IdentityNumber:      person.IdentityNumber,
@@ -327,6 +313,21 @@ func (r *repository) Save(person domain.Person) error {
 		default:
 			return domain.ErrUserCannotSave
 		}
+	}
+
+	return nil
+}
+
+func (r *repository) SaveVerificationToken(token *domain.EmailVerificationToken) error {
+	stmt, err := r.db.Prepare(querySaveVerificationToken)
+	if err != nil {
+		return domain.ErrUserCannotSaveVerificationToken
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(token.ID, token.UserID, token.Token, token.ExpiresAt)
+	if err != nil {
+		return domain.ErrUserCannotSaveVerificationToken
 	}
 
 	return nil

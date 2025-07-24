@@ -49,7 +49,7 @@ func (r *ResendNotifier) SendVerificationEmail(email, verificationLink string) e
 				%s
 			</p>
 			<p style="color: #999; font-size: 12px; margin-top: 30px;">
-				Este enlace expirará en 24 horas por seguridad.
+				Este enlace expirará en 15 minutos por seguridad.
 			</p>
 		</div>
 	`, verificationLink, verificationLink)

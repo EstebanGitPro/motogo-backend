@@ -9,12 +9,11 @@ import (
 )
 
 var (
-	ErrUnmarshalBody      = errors.New("error unmarshal request body")
-	ErrValidationUser     = errors.New("error validation user")
-	ErrInvalidJSONFormat  = errors.New("invalid JSON format")
-	ErrSchemaValidation   = errors.New("schema validation failed")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-
+	ErrUnmarshalBody     = errors.New("error unmarshal request body")
+	ErrValidationUser    = errors.New("error validation user")
+	ErrInvalidJSONFormat = errors.New("invalid JSON format")
+	ErrSchemaValidation  = errors.New("schema validation failed")
+	ErrInvalidToken      = errors.New("invalid or expired token")
 )
 
 type WebError struct {
@@ -49,8 +48,8 @@ func (h handler) HandleError(c *gin.Context, err error) {
 		})
 		return
 	case errors.Is(err, ErrInvalidToken):
-		c.JSON(http.StatusBadRequest, WebError{
-			Status:  http.StatusBadRequest,
+		c.JSON(http.StatusUnauthorized, WebError{
+			Status:  http.StatusUnauthorized,
 			Message: err.Error(),
 		})
 		return
@@ -90,8 +89,8 @@ func (h handler) HandleError(c *gin.Context, err error) {
 			Message: err.Error(),
 		})
 	case errors.Is(err, domain.ErrorEmailNotVerified):
-		c.JSON(http.StatusConflict, WebError{
-			Status:  http.StatusBadRequest,
+		c.JSON(http.StatusForbidden, WebError{
+			Status:  http.StatusForbidden,
 			Message: err.Error(),
 		})
 		return
