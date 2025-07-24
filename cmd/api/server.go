@@ -23,9 +23,11 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 
 	app.LoadHTMLGlob(templatePath)
 
-	app.POST("/v1/user", handler.Save())
-	app.GET("/v1/auth/verify-email/:token", handler.VerifyEmail())
-	app.GET("/v1/email/status", handler.CheckEmailStatus())
+    app.POST("/v1/motogo/users", handler.Save())
+    app.GET("/v1/motogo/auth/verify-email/:token", handler.VerifyEmail())
+    app.GET("/v1/motogo/email/status", handler.CheckEmailStatus())
+    app.POST("/v1/motogo/auth/login", handler.Login())
+
 }
 
 func Boostrap(app *gin.Engine) {

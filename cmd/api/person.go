@@ -6,6 +6,12 @@ import (
 	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
 )
 
+
+type PersonLogin struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 type PersonRequest struct {
 	IdentityNumber      string `json:"identity_number"`
 	FirstName           string `json:"first_name"`
@@ -19,11 +25,6 @@ type PersonRequest struct {
 	Role                string `json:"role"`
 }
 
-// PersonLogin represents the data for a login attempt.
-type PersonLogin struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
 
 type LoginResponse struct {
 	ID                  string `json:"id"`
@@ -39,6 +40,10 @@ type LoginResponse struct {
 	Token               string `json:"token"`
 }
 
+type PersonEmailVerifiedResponse struct {
+	EmailVerified bool `json:"email_verified"`
+}
+
 type PersonResponse struct {
 	ID                  string `json:"id"`
 	IdentityNumber      string `json:"identity_number"`
@@ -50,6 +55,19 @@ type PersonResponse struct {
 	EmailVerified       bool   `json:"email_verified"`
 	PhoneNumberVerified bool   `json:"phone_number_verified"`
 	Role                string `json:"role"`
+}
+
+type ResponseEmail struct {
+	Titulo    string
+	Contenido template.HTML
+}
+
+
+func (p PersonLogin) ToDomain() domain.Person {
+	return domain.Person{
+		Email:    p.Email,
+		Password: p.Password,
+	}
 }
 
 func (p PersonRequest) ToDomain() domain.Person {
@@ -64,22 +82,5 @@ func (p PersonRequest) ToDomain() domain.Person {
 		EmailVerified:       p.EmailVerified,
 		PhoneNumberVerified: p.PhoneNumberVerified,
 		Role:                p.Role,
-	}
-}
-
-type PersonEmailVerifiedResponse struct {
-	EmailVerified bool `json:"email_verified"`
-}
-
-type ResponseEmail struct {
-	Titulo    string
-	Contenido template.HTML
-}
-
-
-func (p PersonLogin) ToDomain() domain.Person {
-	return domain.Person{
-		Email:    p.Email,
-		Password: p.Password,
 	}
 }

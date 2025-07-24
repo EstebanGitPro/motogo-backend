@@ -5,6 +5,8 @@ import (
 
 	"github.com/EstebanGitPro/motogo-backend/config"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/person"
+	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
+	"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/notification"
 
 	//"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"  // <- Importar JWT
@@ -14,6 +16,7 @@ import (
 type Dependencies struct {
 	PersonService person.Service
 	config        *config.Config
+	jwtGenerator  token.Generator
 }
 
 func initDependencies() *Dependencies {
@@ -32,12 +35,13 @@ func initDependencies() *Dependencies {
 		log.Fatalf("Error creating Resend notifier: %v", err)
 	}
 
-	//jwtGenerator := jwt.New(cfg.JWT.SecretKey)
+	jwtGenerator := jwt.New(cfg.JWT.SecretKey)
 
-	personService := person.NewService(personRepo, resendNotifier, nil, cfg)
+	personService := person.NewService(personRepo, resendNotifier, jwtGenerator, cfg)
 
 	return &Dependencies{
 		PersonService: personService,
 		config:        cfg,
+		jwtGenerator:  jwtGenerator,
 	}
 }

@@ -1,20 +1,19 @@
 package person
 
 import (
-	//security "github.com/andresh296/go-crud/internal/platform/token"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"time"
-
 	"log"
+	"time"
 
 	"github.com/EstebanGitPro/motogo-backend/config"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Repository interface {
@@ -33,6 +32,9 @@ type Service interface {
 	GetPersonByEmail(email string) (*Person, error)
 	Save(person Person) (Person, error)
 	VerifyEmailByToken(tokenString string) error
+	CleanupExpiredTokens() error
+	StartCleanupScheduler()
+	Login(person Person) (*Person, string, error)
 }
 
 type Notifier interface {
@@ -55,6 +57,48 @@ func NewService(repo Repository, notifier Notifier, tokenGenerator token.Generat
 	}
 }
 
+func (s service) generateSecureVerificationToken(userID string) (*EmailVerificationToken, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, err
+	}
+
+	rawToken := base64.URLEncoding.EncodeToString(tokenBytes)
+
+	hasher := sha256.New()
+	hasher.Write([]byte(rawToken))
+	hashedToken := hex.EncodeToString(hasher.Sum(nil))
+
+	verificationToken := &EmailVerificationToken{
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		Token:     hashedToken,
+		ExpiresAt: time.Now().Add(1 * time.Minute),
+		Used:      false,
+		CreatedAt: time.Now(),
+	}
+
+	if err := s.repository.SaveVerificationToken(verificationToken); err != nil {
+		return nil, err
+	}
+
+	verificationToken.RawToken = rawToken
+
+	return verificationToken, nil
+}
+
+func (p Person) comparePassword(password string) error {
+	err := bcrypt.CompareHashAndPassword([]byte(p.Password), []byte(password))
+	if err != nil {
+		return ErrValidationUser
+	}
+	return err
+}
+
+func (s service) CleanupExpiredTokens() error {
+	return s.repository.CleanupExpiredTokens()
+}
+
 func (s service) GetByID(id string) (*Person, error) {
 	return s.repository.GetByID(id)
 }
@@ -64,7 +108,6 @@ func (s service) GetPersonByEmail(email string) (*Person, error) {
 }
 
 func (s service) Save(person Person) (Person, error) {
-
 	existingPerson, err := s.repository.GetPersonByEmail(person.Email)
 	if err == nil && existingPerson != nil {
 		return Person{}, ErrDuplicateUser
@@ -85,7 +128,7 @@ func (s service) Save(person Person) (Person, error) {
 		return Person{}, err
 	}
 
-	verificationLink := fmt.Sprintf("%s/v1/auth/verify-email/%s",
+	verificationLink := fmt.Sprintf("%s/v1/motogo/auth/verify-email/%s",
 		s.config.Verification.BaseURL,
 		verificationToken.RawToken)
 
@@ -97,81 +140,57 @@ func (s service) Save(person Person) (Person, error) {
 	return person, nil
 }
 
-func (s service) generateSecureVerificationToken(userID string) (*EmailVerificationToken, error) {
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return nil, err
-	}
-
-	rawToken := base64.URLEncoding.EncodeToString(tokenBytes)
-
+func (s service) VerifyEmailByToken(tokenString string) error {
 	hasher := sha256.New()
-	hasher.Write([]byte(rawToken))
-	hashedToken := hex.EncodeToString(hasher.Sum(nil))
-
-	verificationToken := &EmailVerificationToken{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		Token:     hashedToken,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-		Used:      false,
-		CreatedAt: time.Now(),
-	}
-
-	if err := s.repository.SaveVerificationToken(verificationToken); err != nil {
-		return nil, err
-	}
-
-	verificationToken.RawToken = rawToken
-
-	return verificationToken, nil
-}
-
-func (s service) VerifyEmailByToken(tokenstring string) error {
-
-	hasher := sha256.New()
-	hasher.Write([]byte(tokenstring))
+	hasher.Write([]byte(tokenString))
 	hashedToken := hex.EncodeToString(hasher.Sum(nil))
 
 	err := s.repository.GetVerificationTokenByHash(hashedToken)
 	if err != nil {
-		return ErrTokenNotFound
+		return err
 	}
 
 	return err
 }
 
-/*
-func (s service) VerifyEmail(tokenString string) error {
-	// Validar token (retorna identityNumber)
-	identityNumber, err := s.tokenGenerator.Validate(tokenString)
+func (s *service) Login(person Person) (*Person, string, error) {
+	personFound, err := s.repository.GetPersonByEmail(person.Email)
 	if err != nil {
-		return err
+		return nil, "", ErrValidationUser
 	}
 
-	// Iniciar transacción
-	tx, err := s.repository.BeginTx()
+	err = personFound.comparePassword(person.Password)
 	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	// Marcar el email como verificado
-	if err := s.repository.MarkEmailAsVerifiedTx(tx, identityNumber); err != nil {
-		return err
+		return nil, "", ErrValidationUser
 	}
 
-	// Confirmar transacción
-	return tx.Commit()
-}
-*/
+	if !personFound.EmailVerified {
+		verificationToken, err := s.generateSecureVerificationToken(personFound.ID)
+		if err != nil {
+			return nil, "", err
+		}
 
-func (s service) CleanupExpiredTokens() error {
-	return s.repository.CleanupExpiredTokens()
+		verificationLink := fmt.Sprintf("%s/v1/auth/verify-email/%s",
+			s.config.Verification.BaseURL,
+			verificationToken.RawToken)
+
+		err = s.notifier.SendVerificationEmail(personFound.Email, verificationLink)
+		if err != nil {
+			log.Printf("Error sending verification email to %s: %v", personFound.Email, err)
+		}
+		return nil, "", ErrorEmailNotVerified
+	}
+
+	token, err := s.tokenGenerator.Generate(personFound.ID, 1*time.Minute)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return personFound, token, nil
 }
 
 func (s service) StartCleanupScheduler() {
-	ticker := time.NewTicker(24 * time.Hour)
+	ticker := time.NewTicker(1 * time.Minute)
 	go func() {
 		for range ticker.C {
 			if err := s.CleanupExpiredTokens(); err != nil {
