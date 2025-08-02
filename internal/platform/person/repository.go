@@ -36,6 +36,7 @@ const (
 	queryMarkTokenAsUsed = `UPDATE email_verification_tokens SET used = TRUE WHERE id = ?`
 
 	querySaveVerificationToken = `INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)`
+	queryUpdate                = `UPDATE persons  SET identity_number = ?, first_name = ?, last_name = ?, second_last_name = ?, phone_number = ? WHERE id = ?`
 )
 
 type repository struct {
@@ -201,9 +202,9 @@ func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
 
 	rollbackWithLog := func(err error) error {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Printf("Error durante rollback: %v (error original: %v)", rbErr, err)
+			log.Printf("Error during rollback: %v (original error: %v)", rbErr, err)
 		} else {
-			log.Printf("Rollback exitoso después de error: %v", err)
+			log.Printf("Successful rollback after error: %v", err)
 		}
 		return err
 	}
@@ -330,5 +331,26 @@ func (r *repository) SaveVerificationToken(token *domain.EmailVerificationToken)
 		return domain.ErrUserCannotSaveVerificationToken
 	}
 
+	return nil
+}
+
+func (r *repository) Update(id string, person domain.Person) error {
+	stmt, err := r.db.Prepare(queryUpdate)
+	if err != nil {
+		return domain.ErrUserCannotUpdate
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		person.IdentityNumber,
+		person.FirstName,
+		person.LastName,
+		person.SecondLastName,
+		person.PhoneNumber,
+		id,
+	)
+	if err != nil {
+		return domain.ErrUserCannotUpdate
+	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
 )
 
-
 type PersonLogin struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -24,7 +23,6 @@ type PersonRequest struct {
 	PhoneNumberVerified bool   `json:"phone_number_verified"`
 	Role                string `json:"role"`
 }
-
 
 type LoginResponse struct {
 	ID                  string `json:"id"`
@@ -57,11 +55,26 @@ type PersonResponse struct {
 	Role                string `json:"role"`
 }
 
-type ResponseEmail struct {
-	Titulo    string
-	Contenido template.HTML
+type PersonUpdateRequest struct {
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	SecondLastName string `json:"second_last_name"`
+	PhoneNumber    string `json:"phone_number"`
 }
 
+type ResponseEmail struct {
+	Title   string
+	Content template.HTML
+}
+
+func (P PersonUpdateRequest) ToDomain() domain.Person {
+	return domain.Person{
+		FirstName:      P.FirstName,
+		LastName:       P.LastName,
+		SecondLastName: P.SecondLastName,
+		PhoneNumber:    P.PhoneNumber,
+	}
+}
 
 func (p PersonLogin) ToDomain() domain.Person {
 	return domain.Person{
