@@ -25,6 +25,7 @@ type Repository interface {
 	MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error
 	MarkEmailAsVerifiedTx(tx *sql.Tx, userID string) error
 	CleanupExpiredTokens() error
+	Update(id string, person Person) error
 }
 
 type Service interface {
@@ -35,6 +36,7 @@ type Service interface {
 	CleanupExpiredTokens() error
 	StartCleanupScheduler()
 	Login(person Person) (*Person, string, error)
+	Update(id string, person Person) error
 }
 
 type Notifier interface {
@@ -170,7 +172,7 @@ func (s *service) Login(person Person) (*Person, string, error) {
 			return nil, "", err
 		}
 
-		verificationLink := fmt.Sprintf("%s/v1/auth/verify-email/%s",
+		verificationLink := fmt.Sprintf("%s/v1/motogo/auth/verify-email/%s",
 			s.config.Verification.BaseURL,
 			verificationToken.RawToken)
 
@@ -198,4 +200,22 @@ func (s service) StartCleanupScheduler() {
 			}
 		}
 	}()
+}
+
+func (s *service) Update(id string, person Person) error {
+	existingPerson, err := s.repository.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if existingPerson == nil {
+		return  ErrUserCannotFound
+	}
+
+
+	existingPerson.FirstName = person.FirstName
+	existingPerson.LastName = person.LastName
+	existingPerson.SecondLastName = person.SecondLastName
+	existingPerson.PhoneNumber = person.PhoneNumber
+
+	return s.repository.Update(id, *existingPerson)
 }

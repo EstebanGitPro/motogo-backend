@@ -19,15 +19,15 @@ func New(service domain.Service) *handler {
 	}
 }
 
-func (h handler) renderErrorPage(c *gin.Context, titulo, contenido string) {
+func (h handler) renderErrorPage(c *gin.Context, title, content string) {
 	data := ResponseEmail{
-		Titulo:    titulo,
-		Contenido: template.HTML(fmt.Sprintf("<p>%s</p>", contenido)),
+		Title:   title,
+		Content: template.HTML(fmt.Sprintf("<p>%s</p>", content)),
 	}
 	c.HTML(http.StatusBadRequest, "response.html", data)
 }
 
-func (h handler) handleEmailVerificationError(c *gin.Context, err error) {
+func (h handler) handlerEmailVerificationError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrTokenExpired:
 		h.renderErrorPage(c, "Token Expirado", "El enlace de verificación ha expirado. Por favor, solicita uno nuevo.")
@@ -137,13 +137,13 @@ func (h handler) VerifyEmail() func(c *gin.Context) {
 
 		err := h.service.VerifyEmailByToken(token)
 		if err != nil {
-			h.handleEmailVerificationError(c, err)
+			h.handlerEmailVerificationError(c, err)
 			return
 		}
 
 		data := ResponseEmail{
-			Titulo:    "Bienvenido a MotoGo",
-			Contenido: template.HTML(`<p>Tu correo ha sido verificado exitosamente. Ahora puedes disfrutar de todas las funcionalidades.</p>`),
+			Title:   "Bienvenido a MotoGo",
+			Content: template.HTML(`<p>Tu correo ha sido verificado exitosamente. Ahora puedes disfrutar de todas las funcionalidades.</p>`),
 		}
 		c.HTML(http.StatusOK, "response.html", data)
 	}
@@ -182,5 +182,25 @@ func (h handler) Login() func(c *gin.Context) {
 		}
 
 		c.JSON(http.StatusOK, response)
+	}
+
+}
+
+func (h *handler) Update() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+
+		var req PersonUpdateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			h.HandleError(c, ErrInvalidJSONFormat)
+			return
+		}
+
+		if err := h.service.Update(id, req.ToDomain()); err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		c.Status(http.StatusNoContent)
 	}
 }

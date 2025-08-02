@@ -24,4 +24,5 @@ var (
 	ErrGetVerificationToken            = errors.New("error getting verification token")
 	ErrVerificationTokenNotFound       = errors.New("verification token not found")
 	ErrUserCannotSaveVerificationToken = errors.New("error user can not save verification token")
+	ErrUserCannotUpdate                = errors.New("error user can not update")
 )

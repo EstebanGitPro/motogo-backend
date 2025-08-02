@@ -8,8 +8,6 @@ import (
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/notification"
-
-	//"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"  // <- Importar JWT
 	repo "github.com/EstebanGitPro/motogo-backend/internal/platform/person"
 )
 

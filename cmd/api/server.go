@@ -23,10 +23,12 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 
 	app.LoadHTMLGlob(templatePath)
 
-    app.POST("/v1/motogo/users", handler.Save())
-    app.GET("/v1/motogo/auth/verify-email/:token", handler.VerifyEmail())
-    app.GET("/v1/motogo/email/status", handler.CheckEmailStatus())
-    app.POST("/v1/motogo/auth/login", handler.Login())
+	app.POST("/v1/motogo/users", handler.Save())
+	app.GET("/v1/motogo/auth/verify-email/:token", handler.VerifyEmail())
+	app.GET("/v1/motogo/email/status", handler.CheckEmailStatus())
+	app.POST("/v1/motogo/auth/login", handler.Login())
+	app.GET("/v1/motogo/users/:id", handler.GetByID())  
+	app.PATCH("/v1/motogo/users/:id", handler.Update()) 
 
 }
 
