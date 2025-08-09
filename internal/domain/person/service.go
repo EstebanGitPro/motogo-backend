@@ -110,20 +110,25 @@ func (s service) GetPersonByEmail(email string) (*Person, error) {
 }
 
 func (s service) Save(person Person) (Person, error) {
+
 	existingPerson, err := s.repository.GetPersonByEmail(person.Email)
 	if err == nil && existingPerson != nil {
 		return Person{}, ErrDuplicateUser
 	}
+	
 
 	person.setID()
 	if err := person.hashPassword(); err != nil {
 		return Person{}, err
 	}
 
+
 	err = s.repository.Save(person)
 	if err != nil {
 		return Person{}, ErrUserCannotSave
 	}
+	
+
 
 	verificationToken, err := s.generateSecureVerificationToken(person.ID)
 	if err != nil {
@@ -134,8 +139,10 @@ func (s service) Save(person Person) (Person, error) {
 		s.config.Verification.BaseURL,
 		verificationToken.RawToken)
 
+
 	err = s.notifier.SendVerificationEmail(person.Email, verificationLink)
 	if err != nil {
+	
 		log.Printf("Error sending verification email to %s: %v", person.Email, err)
 	}
 
@@ -183,7 +190,7 @@ func (s *service) Login(person Person) (*Person, string, error) {
 		return nil, "", ErrorEmailNotVerified
 	}
 
-	token, err := s.tokenGenerator.Generate(personFound.ID, 1*time.Minute)
+	token, err := s.tokenGenerator.Generate(personFound.ID, 15*time.Minute)
 	if err != nil {
 		return nil, "", err
 	}
@@ -208,9 +215,8 @@ func (s *service) Update(id string, person Person) error {
 		return err
 	}
 	if existingPerson == nil {
-		return  ErrUserCannotFound
+		return ErrUserCannotFound
 	}
-
 
 	existingPerson.FirstName = person.FirstName
 	existingPerson.LastName = person.LastName

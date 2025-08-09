@@ -34,16 +34,12 @@ func (j *jwtGenerator) Generate(userID string, duration time.Duration) (string, 
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(j.secretKey)
-	if err != nil {
-		return "", err
-	}
-	return tokenString, nil
+	return token.SignedString(j.secretKey)
 }
 
-func (j *jwtGenerator) Validate(tokenString string) (string, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 
+func (j *jwtGenerator) Validate(tokenString string) (*token.Claims, error) {
+	jwtToken, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
@@ -51,12 +47,16 @@ func (j *jwtGenerator) Validate(tokenString string) (string, error) {
 	})
 
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		return claims.ID, nil
+	if claims, ok := jwtToken.Claims.(*Claims); ok && jwtToken.Valid {
+		
+		return &token.Claims{
+			ID:    claims.ID,
+			Email: claims.Email,
+		}, nil
 	}
 
-	return "", jwt.ErrTokenInvalidClaims
+	return nil, jwt.ErrTokenInvalidClaims
 }

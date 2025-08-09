@@ -1,42 +1,70 @@
 package api
 
 import (
-	//mid "github.com/EstebanGitPro/motogo-backend/internal/middleware"
-	//schema "github.com/EstebanGitPro/motogo-backend/internal/platform/schema"
 	"log"
+	"log/slog"
 	"path/filepath"
 
+	middleware "github.com/EstebanGitPro/motogo-backend/internal/middleware"
+	"github.com/EstebanGitPro/motogo-backend/internal/platform/schema"
 	"github.com/EstebanGitPro/motogo-backend/tools/utils"
 	"github.com/gin-gonic/gin"
 )
 
 func routing(app *gin.Engine, dependencies *Dependencies) {
+	slog.Info("Setting up routes")
+	
 	handler := New(dependencies.PersonService)
 
 	moduleRoot, err := utils.FindModuleRoot()
 	if err != nil {
-		log.Fatalf("Error finding module root: %v", err)
+		slog.Error("Error finding module root", slog.String("error", err.Error()))
+		return
 	}
 
 	templatePath := filepath.Join(moduleRoot, "cmd", "api", "template", "*")
-	log.Printf("Template path: %s", templatePath)
+	slog.Debug("Template configuration", slog.String("template_path", templatePath))
 
 	app.LoadHTMLGlob(templatePath)
 
-	app.POST("/v1/motogo/users", handler.Save())
-	app.GET("/v1/motogo/auth/verify-email/:token", handler.VerifyEmail())
-	app.GET("/v1/motogo/email/status", handler.CheckEmailStatus())
-	app.POST("/v1/motogo/auth/login", handler.Login())
-	app.GET("/v1/motogo/users/:id", handler.GetByID())  
-	app.PATCH("/v1/motogo/users/:id", handler.Update()) 
+	validators, err := schema.NewValidator(&schema.DefaultFileReader{})
+	if err != nil {
+		slog.Error("Error creating validator", slog.String("error", err.Error()))
+		
+		return
+	}
+	validator := middleware.NewMiddlewareValidator(validators)
 
+	
+	public := app.Group("/v1/motogo")
+	{
+		public.POST("/users", validator.WithValidateRegister(), handler.Save())
+		public.POST("/auth/login", validator.WithValidateLogin(), handler.Login())
+		public.GET("/auth/verify-email/:token", handler.VerifyEmail())
+		public.GET("/email/status", handler.CheckEmailStatus())
+	}
+
+	protected := app.Group("/v1/motogo")
+	protected.Use(middleware.JWTAuthMiddleware(dependencies.Config.JWT))
+	{
+		protected.GET("/users/:id", handler.GetByID())
+		protected.PATCH("/users/:id", validator.WithValidateUpdate(), handler.Update())
+	}
+
+	slog.Info("API routes configured successfully",
+		slog.Int("public_routes", 4),
+		slog.Int("protected_routes", 2))
 }
 
-func Boostrap(app *gin.Engine) {
-	dependencies := initDependencies()
-	if dependencies == nil {
-		panic("dependencies not initialized")
+func Bootstrap(app *gin.Engine) *Dependencies {
+
+	dependencies, err := initDependencies()
+	if err != nil {
+		log.Fatal("Error initializing dependencies")
+		return nil
 	}
-	dependencies.config.PrintConfig()
+	
 	routing(app, dependencies)
+
+	return dependencies
 }
