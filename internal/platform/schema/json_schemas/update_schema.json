@@ -22,19 +22,13 @@
       "type": "string",
       "description": "Cell phone number",
       "pattern": "^[0-9]{10}$"
-    },
-    "password": {
-      "type": "string",
-      "description": "Access password",
-      "minLength": 8,
-      "maxLength": 50
     }
+
   },
   "required": [
     "first_name",
     "last_name",
-    "phone_number",
-    "password"
+    "phone_number"
   ],
   "additionalProperties": false
 }
