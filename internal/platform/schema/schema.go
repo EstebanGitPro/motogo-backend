@@ -11,10 +11,11 @@ import (
 )
 
 type Validators struct {
-	FileReader FileReaderInterface
-	LoginValidator *jsonschema.Schema
+	FileReader        FileReaderInterface
+	LoginValidator    *jsonschema.Schema
 	RegisterValidator *jsonschema.Schema
-}	
+	UpdateValidator   *jsonschema.Schema
+}
 
 type FileReaderInterface interface {
 	ReadJsonSchema(resourcePath string) ([]byte, error)
@@ -23,7 +24,7 @@ type FileReaderInterface interface {
 type DefaultFileReader struct{}
 
 func (f *DefaultFileReader) ReadJsonSchema(resourcePath string) ([]byte, error) {
-	
+
 	root, err := utils.FindModuleRoot()
 
 	if err != nil {
@@ -37,7 +38,7 @@ func (f *DefaultFileReader) ReadJsonSchema(resourcePath string) ([]byte, error) 
 	defer data.Close()
 
 	return io.ReadAll(data)
-	
+
 }
 
 func NewValidator(fileReader FileReaderInterface) (*Validators, error) {
@@ -50,7 +51,19 @@ func NewValidator(fileReader FileReaderInterface) (*Validators, error) {
 		return nil, err
 	}
 
+	login, err := validator.createSchema("login_schema.json")
+	if err != nil {
+		return nil, err
+	}
+
+	update, err := validator.createSchema("update_schema.json")
+	if err != nil {
+		return nil, err
+	}
+
+	validator.LoginValidator = login
 	validator.RegisterValidator = register
+	validator.UpdateValidator = update
 
 	return validator, nil
 
@@ -59,13 +72,13 @@ func NewValidator(fileReader FileReaderInterface) (*Validators, error) {
 func (v *Validators) createSchema(resourcePath string) (*jsonschema.Schema, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.AssertFormat = true
-	schemaJSON, err := v.FileReader.ReadJsonSchema(resourcePath) 
+	schemaJSON, err := v.FileReader.ReadJsonSchema(resourcePath)
 	if err != nil {
 		return nil, errors.New("error reading json schema" + err.Error())
 	}
 
 	if schemaJSON == nil {
-		return nil, errors.New("SchemaJSON is nil or empty")	
+		return nil, errors.New("SchemaJSON is nil or empty")
 	}
 
 	schema, err := compiler.Compile(schemaJSON)
@@ -75,5 +88,3 @@ func (v *Validators) createSchema(resourcePath string) (*jsonschema.Schema, erro
 
 	return schema, nil
 }
-
-

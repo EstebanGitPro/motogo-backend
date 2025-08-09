@@ -1,7 +1,6 @@
 package api
 
 import (
-	"log"
 
 	"github.com/EstebanGitPro/motogo-backend/config"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/person"
@@ -13,24 +12,27 @@ import (
 
 type Dependencies struct {
 	PersonService person.Service
-	config        *config.Config
-	jwtGenerator  token.Generator
+	PersonRepo    person.Repository
+	Notifier      person.Notifier
+	Config        *config.Config
+	JwtGenerator  token.Generator
 }
 
-func initDependencies() *Dependencies {
+func initDependencies() (*Dependencies, error) {
+
 
 	cfg := config.MustLoadConfig()
 
 	db, err := repo.GetDB(cfg.Database)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+		return nil , err
 	}
 
 	personRepo := repo.NewRepository(db)
 
 	resendNotifier, err := notification.NewResendNotifier(cfg.Resend.APIKey, cfg.Resend.FromEmail)
 	if err != nil {
-		log.Fatalf("Error creating Resend notifier: %v", err)
+		return nil, err
 	}
 
 	jwtGenerator := jwt.New(cfg.JWT.SecretKey)
@@ -39,7 +41,9 @@ func initDependencies() *Dependencies {
 
 	return &Dependencies{
 		PersonService: personService,
-		config:        cfg,
-		jwtGenerator:  jwtGenerator,
-	}
+		PersonRepo:    personRepo,
+		Notifier:      resendNotifier,
+		Config:        cfg,
+		JwtGenerator:  jwtGenerator,
+	}, nil
 }

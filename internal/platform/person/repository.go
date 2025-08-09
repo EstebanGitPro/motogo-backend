@@ -273,6 +273,7 @@ func (r *repository) MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error {
 }
 
 func (r *repository) Save(person domain.Person) error {
+	
 	personToSave := Person{
 		ID:                  person.ID,
 		IdentityNumber:      person.IdentityNumber,
@@ -287,11 +288,13 @@ func (r *repository) Save(person domain.Person) error {
 		Role:                person.Role,
 	}
 
+	
 	stmt, err := r.db.Prepare(querySave)
 	if err != nil {
 		return domain.ErrUserCannotSave
 	}
 	defer stmt.Close()
+	
 
 	_, err = stmt.Exec(
 		personToSave.ID,
@@ -308,14 +311,16 @@ func (r *repository) Save(person domain.Person) error {
 	)
 
 	if err != nil {
+		
 		switch {
 		case strings.Contains(err.Error(), "Duplicate"):
+			
 			return domain.ErrDuplicateUser
 		default:
+		
 			return domain.ErrUserCannotSave
 		}
 	}
-
 	return nil
 }
 

@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -11,13 +11,14 @@ import (
 )
 
 type Config struct {
-	Environment string    `json:"environment"`
-	Database    Database  `json:"database"`
-	Server      Server    `json:"server"`
-	Resend      Resend    `json:"resend"`
-	JWT         JWTConfig `json:"jwt"`
+	Environment  string       `json:"environment"`
+	Database     Database     `json:"database"`
+	Server       Server       `json:"server"`
+	Resend       Resend       `json:"resend"`
+	JWT          JWTConfig    `json:"jwt"`
 	Verification Verification `json:"verification"`
 }
+
 
 type Verification struct {
 	BaseURL string `json:"base_url"`
@@ -51,7 +52,7 @@ type JWTConfig struct {
 func LoadConfig() (*Config, error) {
 	root, err := utils.FindModuleRoot()
 	if err != nil {
-		return nil, fmt.Errorf("error encontrando la raíz del módulo: %w", err)
+		return nil, fmt.Errorf("error finding module root: %w", err)
 	}
 
 	env := os.Getenv("APP_ENV")
@@ -70,25 +71,29 @@ func LoadConfig() (*Config, error) {
 	configPath := filepath.Join(root, "config", configFile)
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Printf("Archivo %s no encontrado, usando local-config.json", configFile)
+		slog.Warn("Config file not found, falling back to default",
+			slog.String("requested_file", configFile),
+			slog.String("fallback_file", "local-config.json"))
 		configPath = filepath.Join(root, "config", "local-config.json")
 	}
 
 	file, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("error leyendo archivo de configuración %s: %w", configPath, err)
+		return nil, fmt.Errorf("error reading config file %s: %w", configPath, err)
 	}
 
 	var config Config
-	err = json.Unmarshal(file, &config)
-	if err != nil {
-		return nil, fmt.Errorf("error parseando configuración JSON: %w", err)
+	if err = json.Unmarshal(file, &config); err != nil {
+		return nil, fmt.Errorf("error parsing JSON configuration: %w", err)
 	}
 
-	log.Printf("Configuración cargada desde: %s (entorno: %s)", configFile, config.Environment)
+	slog.Info("Configuration loaded successfully",
+		slog.String("config_file", configFile),
+		slog.String("environment", config.Environment),
+		slog.String("config_path", configPath))
 
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("configuración inválida: %w", err)
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return &config, nil
@@ -97,41 +102,42 @@ func LoadConfig() (*Config, error) {
 func MustLoadConfig() *Config {
 	config, err := LoadConfig()
 	if err != nil {
-		log.Fatal("Error fatal cargando configuración: ", err)
+		slog.Error("Fatal error loading configuration", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	return config
 }
 
 func (c *Config) Validate() error {
 	if c.Database.Driver == "" {
-		return fmt.Errorf("driver de base de datos es requerido")
+		return fmt.Errorf("database driver is required")
 	}
 
+	
 	if c.Database.URL != "" {
+		slog.Debug("Using database URL connection string")
 		return nil
 	}
 
-	if c.Database.Host == "" {
-		return fmt.Errorf("host de base de datos es requerido")
+	
+	requiredFields := map[string]string{
+		"host":     c.Database.Host,
+		"port":     c.Database.Port,
+		"username": c.Database.Username,
+		"password": c.Database.Password,
+		"name":     c.Database.Name,
 	}
-	if c.Database.Port == "" {
-		return fmt.Errorf("puerto de base de datos es requerido")
-	}
-	if c.Database.Username == "" {
-		return fmt.Errorf("usuario de base de datos es requerido")
-	}
-	if c.Database.Password == "" {
-		return fmt.Errorf("contraseña de base de datos es requerida")
-	}
-	if c.Database.Name == "" {
-		return fmt.Errorf("nombre de base de datos es requerido")
+
+	for field, value := range requiredFields {
+		if value == "" {
+			return fmt.Errorf("database %s is required", field)
+		}
 	}
 
 	return nil
 }
 
 func (c *Config) GetMySQLDSN() string {
-
 	if c.Database.URL != "" {
 		return c.Database.URL
 	}
@@ -159,22 +165,3 @@ func (c *Config) IsProduction() bool {
 	return c.Environment == "production" || c.Environment == "railway"
 }
 
-func (c *Config) PrintConfig() {
-	log.Println("=== Configuración Cargada ===")
-	log.Printf("Entorno: %s", c.Environment)
-	log.Printf("Servidor: %s", c.GetServerAddress())
-	log.Printf("Base de Datos Driver: %s", c.Database.Driver)
-
-	if c.Database.URL != "" {
-		log.Printf("Base de Datos: URL completa configurada")
-	} else {
-		log.Printf("Base de Datos Host: %s:%s", c.Database.Host, c.Database.Port)
-		log.Printf("Base de Datos Nombre: %s", c.Database.Name)
-		log.Printf("Base de Datos Usuario: %s", c.Database.Username)
-	}
-
-	if c.Database.SSL != "" {
-		log.Printf("SSL: %s", c.Database.SSL)
-	}
-	log.Println("=============================")
-}

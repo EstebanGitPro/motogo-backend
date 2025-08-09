@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"html/template"
+	"log"
+
 	"net/http"
 
 	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
@@ -90,12 +92,16 @@ func (h handler) CheckEmailStatus() func(c *gin.Context) {
 }
 
 func (h handler) Save() func(c *gin.Context) {
+	log.Println("🚨 Aquí debería detenerse el breakpoint")
 	return func(c *gin.Context) {
+		
+		
 		var personRequest PersonRequest
 		if err := c.ShouldBindJSON(&personRequest); err != nil {
 			h.HandleError(c, ErrInvalidJSONFormat)
 			return
 		}
+		
 
 		person, err := h.service.Save(personRequest.ToDomain())
 		if err != nil {
@@ -110,6 +116,7 @@ func (h handler) Save() func(c *gin.Context) {
 			}
 			return
 		}
+		
 
 		response := PersonResponse{
 			ID:                  person.ID,
@@ -123,6 +130,7 @@ func (h handler) Save() func(c *gin.Context) {
 			PhoneNumberVerified: person.PhoneNumberVerified,
 			Role:                person.Role,
 		}
+		
 		c.JSON(http.StatusCreated, response)
 	}
 }
