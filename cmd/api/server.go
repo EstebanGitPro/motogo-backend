@@ -13,7 +13,7 @@ import (
 
 func routing(app *gin.Engine, dependencies *Dependencies) {
 	slog.Info("Setting up routes")
-	
+
 	handler := New(dependencies.PersonService)
 
 	moduleRoot, err := utils.FindModuleRoot()
@@ -30,18 +30,19 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 	validators, err := schema.NewValidator(&schema.DefaultFileReader{})
 	if err != nil {
 		slog.Error("Error creating validator", slog.String("error", err.Error()))
-		
 		return
 	}
 	validator := middleware.NewMiddlewareValidator(validators)
 
-	
 	public := app.Group("/v1/motogo")
 	{
 		public.POST("/users", validator.WithValidateRegister(), handler.Save())
 		public.POST("/auth/login", validator.WithValidateLogin(), handler.Login())
 		public.GET("/auth/verify-email/:token", handler.VerifyEmail())
 		public.GET("/email/status", handler.CheckEmailStatus())
+
+		public.POST("/auth/password-recovery/send", handler.SendPasswordRecoveryEmail())
+		public.POST("/auth/password-recovery/reset", handler.RecoveryPassword())
 	}
 
 	protected := app.Group("/v1/motogo")
@@ -52,7 +53,7 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 	}
 
 	slog.Info("API routes configured successfully",
-		slog.Int("public_routes", 4),
+		slog.Int("public_routes", 6),
 		slog.Int("protected_routes", 2))
 }
 
@@ -63,7 +64,7 @@ func Bootstrap(app *gin.Engine) *Dependencies {
 		log.Fatal("Error initializing dependencies")
 		return nil
 	}
-	
+
 	routing(app, dependencies)
 
 	return dependencies

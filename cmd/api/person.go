@@ -6,6 +6,20 @@ import (
 	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
 )
 
+type ResetPasswordRequest struct {
+	Code        string `json:"code" binding:"required,len=6"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
+}
+
+type SendPasswordRecoveryRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ValidateRecoveryCodeRequest struct {
+	Code string `json:"code" binding:"required,len=6"`
+}
+
+
 type PersonLogin struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -23,6 +37,26 @@ type PersonRequest struct {
 	PhoneNumberVerified bool   `json:"phone_number_verified"`
 	Role                string `json:"role"`
 }
+
+type PersonUpdateRequest struct {
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	SecondLastName string `json:"second_last_name"`
+	PhoneNumber    string `json:"phone_number"`
+}
+
+
+type ValidateRecoveryCodeResponse struct {
+	Valid  bool   `json:"valid"`
+	UserID string `json:"user_id,omitempty"`
+}
+
+
+type GenericResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
 
 type LoginResponse struct {
 	ID                  string `json:"id"`
@@ -55,24 +89,17 @@ type PersonResponse struct {
 	Role                string `json:"role"`
 }
 
-type PersonUpdateRequest struct {
-	FirstName      string `json:"first_name"`
-	LastName       string `json:"last_name"`
-	SecondLastName string `json:"second_last_name"`
-	PhoneNumber    string `json:"phone_number"`
-}
-
 type ResponseEmail struct {
 	Title   string
 	Content template.HTML
 }
 
-func (P PersonUpdateRequest) ToDomain() domain.Person {
+func (p PersonUpdateRequest) ToDomain() domain.Person {
 	return domain.Person{
-		FirstName:      P.FirstName,
-		LastName:       P.LastName,
-		SecondLastName: P.SecondLastName,
-		PhoneNumber:    P.PhoneNumber,
+		FirstName:      p.FirstName,
+		LastName:       p.LastName,
+		SecondLastName: &p.SecondLastName,
+		PhoneNumber:    p.PhoneNumber,
 	}
 }
 
@@ -88,7 +115,7 @@ func (p PersonRequest) ToDomain() domain.Person {
 		IdentityNumber:      p.IdentityNumber,
 		FirstName:           p.FirstName,
 		LastName:            p.LastName,
-		SecondLastName:      p.SecondLastName,
+		SecondLastName:      &p.SecondLastName,
 		Email:               p.Email,
 		PhoneNumber:         p.PhoneNumber,
 		Password:            p.Password,

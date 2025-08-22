@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"strings"
 	"time"
 
 	domain "github.com/EstebanGitPro/motogo-backend/internal/domain/person"
+	"github.com/go-sql-driver/mysql"
 )
 
 const (
@@ -29,14 +29,21 @@ const (
 
 	queryUpdateEmailVerified = `UPDATE persons SET email_verified = TRUE WHERE id = ?`
 
-	queryEmailVerificationTokensExpiration = `DELETE FROM email_verification_tokens WHERE expires_at < NOW()`
+	queryTokensExpiration = `DELETE FROM user_tokens WHERE expires_at < NOW()`
 
-	queryTokenVerificationByHash = `SELECT id, user_id, token, expires_at, used, created_at FROM email_verification_tokens WHERE token = ?`
+	queryTokenVerificationByHash = `SELECT id, user_id, token, code, type, expires_at, used, created_at FROM user_tokens WHERE token = ?`
 
-	queryMarkTokenAsUsed = `UPDATE email_verification_tokens SET used = TRUE WHERE id = ?`
+	queryMarkTokenAsUsed = `UPDATE user_tokens SET used = TRUE WHERE id = ?`
 
-	querySaveVerificationToken = `INSERT INTO email_verification_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)`
-	queryUpdate                = `UPDATE persons  SET identity_number = ?, first_name = ?, last_name = ?, second_last_name = ?, phone_number = ? WHERE id = ?`
+	querySaveVerificationToken = `INSERT INTO user_tokens (id, user_id, token, code, type, expires_at,used, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+
+	queryUpdate = `UPDATE persons  SET identity_number = ?, first_name = ?, last_name = ?, second_last_name = ?, phone_number = ? WHERE id = ?`
+
+	queryUpdatePassword = `UPDATE persons SET password = ? WHERE id = ?`
+
+	queryGetTokenByHash = `SELECT id, user_id, token, code, type, expires_at, used, created_at 
+    FROM user_tokens 
+    WHERE code = ? AND type = ?`
 )
 
 type repository struct {
@@ -54,7 +61,7 @@ func (r *repository) BeginTx() (*sql.Tx, error) {
 }
 
 func (r *repository) CleanupExpiredTokens() error {
-	stmt, err := r.db.Prepare(queryEmailVerificationTokensExpiration)
+	stmt, err := r.db.Prepare(queryTokensExpiration)
 	if err != nil {
 		return domain.ErrCleanupExpiredTokens
 	}
@@ -171,12 +178,15 @@ func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
 	}
 	defer stmt.Close()
 
-	var token domain.EmailVerificationToken
+	var token domain.UserToken
+	var code sql.NullString
 
 	err = stmt.QueryRow(hashedToken).Scan(
 		&token.ID,
 		&token.UserID,
 		&token.Token,
+		&code,
+		&token.Type,
 		&token.ExpiresAt,
 		&token.Used,
 		&token.CreatedAt,
@@ -213,8 +223,14 @@ func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
 		return rollbackWithLog(err)
 	}
 
-	if err := r.MarkEmailAsVerifiedTx(tx, token.UserID); err != nil {
-		return rollbackWithLog(err)
+	switch token.Type {
+	case domain.TokenTypeEmailVerification:
+		if err := r.MarkEmailAsVerifiedTx(tx, token.UserID); err != nil {
+			return rollbackWithLog(err)
+		}
+	case domain.TokenTypePasswordRecovery:
+
+		log.Printf("Password recovery code validated for user: %s", token.UserID)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -273,13 +289,13 @@ func (r *repository) MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error {
 }
 
 func (r *repository) Save(person domain.Person) error {
-	
+
 	personToSave := Person{
 		ID:                  person.ID,
 		IdentityNumber:      person.IdentityNumber,
 		FirstName:           person.FirstName,
 		LastName:            person.LastName,
-		SecondLastName:      person.SecondLastName,
+		SecondLastName:      *person.SecondLastName,
 		Email:               person.Email,
 		PhoneNumber:         person.PhoneNumber,
 		EmailVerified:       person.EmailVerified,
@@ -288,13 +304,11 @@ func (r *repository) Save(person domain.Person) error {
 		Role:                person.Role,
 	}
 
-	
 	stmt, err := r.db.Prepare(querySave)
 	if err != nil {
 		return domain.ErrUserCannotSave
 	}
 	defer stmt.Close()
-	
 
 	_, err = stmt.Exec(
 		personToSave.ID,
@@ -309,29 +323,41 @@ func (r *repository) Save(person domain.Person) error {
 		personToSave.Password,
 		personToSave.Role,
 	)
-
 	if err != nil {
-		
-		switch {
-		case strings.Contains(err.Error(), "Duplicate"):
-			
+		if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1062 {
 			return domain.ErrDuplicateUser
-		default:
-		
+		} else {
 			return domain.ErrUserCannotSave
 		}
+
 	}
+
 	return nil
+
 }
 
-func (r *repository) SaveVerificationToken(token *domain.EmailVerificationToken) error {
+func (r *repository) SaveVerificationToken(token *domain.UserToken) error {
 	stmt, err := r.db.Prepare(querySaveVerificationToken)
 	if err != nil {
 		return domain.ErrUserCannotSaveVerificationToken
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(token.ID, token.UserID, token.Token, token.ExpiresAt)
+	var code sql.NullString
+	if token.Code != nil {
+		code = sql.NullString{String: *token.Code, Valid: true}
+	}
+
+	_, err = stmt.Exec(
+		token.ID,
+		token.UserID,
+		token.Token,
+		code,
+		token.Type,
+		token.ExpiresAt,
+		token.Used,
+		token.CreatedAt,
+	)
 	if err != nil {
 		return domain.ErrUserCannotSaveVerificationToken
 	}
@@ -358,4 +384,123 @@ func (r *repository) Update(id string, person domain.Person) error {
 		return domain.ErrUserCannotUpdate
 	}
 	return nil
+}
+
+func (r *repository) UpdatePassword(userID, hashedPassword string) error {
+	stmt, err := r.db.Prepare(queryUpdatePassword)
+	if err != nil {
+		return domain.ErrUserCannotUpdate
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(hashedPassword, userID)
+	if err != nil {
+		return domain.ErrUserCannotUpdate
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrUserCannotFound
+	}
+
+	return nil
+}
+
+// TODO: Refactor this
+func (r *repository) GetTokenByHash(hashedCode, tokenType string) (*domain.UserToken, error) {
+
+	stmt, err := r.db.Prepare(queryGetTokenByHash)
+
+	if err != nil {
+		return nil, domain.ErrGetVerificationToken
+	}
+	defer stmt.Close()
+
+	var token domain.UserToken
+	var code sql.NullString
+
+	err = stmt.QueryRow(hashedCode, tokenType).Scan(
+		&token.ID,
+		&token.UserID,
+		&token.Token,
+		&code,
+		&token.Type,
+		&token.ExpiresAt,
+		&token.Used,
+		&token.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, domain.ErrVerificationTokenNotFound
+		}
+		return nil, domain.ErrGetVerificationToken
+	}
+
+	if code.Valid {
+		token.Code = &code.String
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		return nil, domain.ErrTokenExpired
+
+	}
+
+	if token.Used {
+		return nil, domain.ErrTokenAlreadyUsed
+	}
+
+	return &token, nil
+}
+
+func (r *repository) ConsumePasswordRecoveryToken(codeString string) (string, error) {
+
+	tx, err := r.BeginTx()
+	if err != nil {
+		return "", err
+	}
+
+	rollbackWithLog := func(err error) error {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Printf("Rollback failed: %v (original error: %v)", rbErr, err)
+		} else {
+			log.Printf("Successful rollback after error: %v", err)
+		}
+		return err
+	}
+
+	token, err := r.GetTokenByHash(codeString, domain.TokenTypePasswordRecovery)
+	if err != nil {
+		rollbackWithLog(err)
+		return "", err
+	}
+
+	if token.Used {
+		rollbackWithLog(domain.ErrTokenAlreadyUsed)
+		return "", domain.ErrTokenAlreadyUsed
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		rollbackWithLog(domain.ErrTokenExpired)
+		return "", domain.ErrTokenExpired
+	}
+
+	err = r.MarkTokenAsUsedTx(tx, token.ID)
+	if err != nil {
+		rollbackWithLog(err)
+		return "", err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		rollbackWithLog(err)
+		return "", err
+	}
+
+	log.Printf("Password recovery token successfully consumed for user: %s", token.UserID)
+	return token.UserID, nil
 }

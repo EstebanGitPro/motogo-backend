@@ -12,7 +12,7 @@ type Person struct {
 	IdentityNumber      string `json:"identity_number"`
 	FirstName           string `json:"first_name"`
 	LastName            string `json:"last_name"`
-	SecondLastName      string `json:"second_last_name"`
+	SecondLastName      *string `json:"second_last_name"`
 	Email               string `json:"email"`
 	PhoneNumber         string `json:"phone_number"`
 	EmailVerified       bool   `json:"email_verified"`
@@ -34,10 +34,17 @@ func (u *Person) hashPassword() error {
 	return nil
 }
 
-type EmailVerificationToken struct {
+const (
+	TokenTypeEmailVerification = "email_verification"
+	TokenTypePasswordRecovery  = "password_recovery"
+)
+
+type UserToken struct {
 	ID        string    `json:"id" db:"id"`
 	UserID    string    `json:"user_id" db:"user_id"`
 	Token     string    `json:"token" db:"token"`
+	Code      *string    `json:"code,omitempty" db:"code"`
+	Type      string    `json:"type" db:"type"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 	Used      bool      `json:"used" db:"used"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
