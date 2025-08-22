@@ -94,6 +94,23 @@ func (h handler) HandleError(c *gin.Context, err error) {
 			Message: err.Error(),
 		})
 		return
+	case errors.Is(err, domain.ErrVerificationTokenNotFound):
+		c.JSON(http.StatusNotFound, WebError{
+			Status:  http.StatusNotFound,
+			Message: err.Error(),
+		})
+		return
+	case errors.Is(err, domain.ErrTokenExpired):
+		c.JSON(http.StatusGone, WebError{
+			Status:  http.StatusGone,
+			Message: err.Error(),
+		})
+		return
+	case errors.Is(err, domain.ErrTokenAlreadyUsed):
+		c.JSON(http.StatusConflict, WebError{
+			Status:  http.StatusConflict,
+			Message: err.Error(),
+		})
 	default:
 		c.JSON(http.StatusInternalServerError, WebError{
 			Status:  http.StatusInternalServerError,

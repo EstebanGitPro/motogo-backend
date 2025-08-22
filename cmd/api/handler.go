@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"html/template"
-	"log"
 
 	"net/http"
 
@@ -92,16 +91,13 @@ func (h handler) CheckEmailStatus() func(c *gin.Context) {
 }
 
 func (h handler) Save() func(c *gin.Context) {
-	log.Println("🚨 Aquí debería detenerse el breakpoint")
 	return func(c *gin.Context) {
-		
-		
+
 		var personRequest PersonRequest
 		if err := c.ShouldBindJSON(&personRequest); err != nil {
 			h.HandleError(c, ErrInvalidJSONFormat)
 			return
 		}
-		
 
 		person, err := h.service.Save(personRequest.ToDomain())
 		if err != nil {
@@ -116,21 +112,20 @@ func (h handler) Save() func(c *gin.Context) {
 			}
 			return
 		}
-		
 
 		response := PersonResponse{
 			ID:                  person.ID,
 			IdentityNumber:      person.IdentityNumber,
 			FirstName:           person.FirstName,
 			LastName:            person.LastName,
-			SecondLastName:      person.SecondLastName,
+			SecondLastName:      *person.SecondLastName,
 			Email:               person.Email,
 			PhoneNumber:         person.PhoneNumber,
 			EmailVerified:       person.EmailVerified,
 			PhoneNumberVerified: person.PhoneNumberVerified,
 			Role:                person.Role,
 		}
-		
+
 		c.JSON(http.StatusCreated, response)
 	}
 }
@@ -180,7 +175,7 @@ func (h handler) Login() func(c *gin.Context) {
 			IdentityNumber:      person.IdentityNumber,
 			FirstName:           person.FirstName,
 			LastName:            person.LastName,
-			SecondLastName:      person.SecondLastName,
+			SecondLastName:      *person.SecondLastName,
 			Email:               person.Email,
 			PhoneNumber:         person.PhoneNumber,
 			EmailVerified:       person.EmailVerified,
@@ -210,5 +205,87 @@ func (h *handler) Update() gin.HandlerFunc {
 		}
 
 		c.Status(http.StatusNoContent)
+	}
+}
+
+func (h handler) SendPasswordRecoveryEmail() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var request SendPasswordRecoveryRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			h.HandleError(c, ErrInvalidJSONFormat)
+			return
+		}
+
+		err := h.service.SendPasswordRecoveryEmail(request.Email)
+		if err != nil {
+			switch err {
+			case domain.ErrUserCannotFound:
+				h.HandleError(c, domain.ErrUserCannotFound)
+			default:
+				h.HandleError(c, err)
+			}
+			return
+		}
+
+		response := GenericResponse{
+			Status:  "success",
+			Message: "password recovery email sent successfully",
+		}
+
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func (h handler) RecoveryPassword() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var request ResetPasswordRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			h.HandleError(c, ErrInvalidJSONFormat)
+			return
+		}
+
+		
+		userID, err := h.service.GetUserIDFromRecoveryCode(request.Code)
+		if err != nil {
+			switch err {
+			case domain.ErrVerificationTokenNotFound:
+				h.HandleError(c, domain.ErrVerificationTokenNotFound)
+			case domain.ErrTokenExpired:
+				h.HandleError(c, domain.ErrTokenExpired)
+			case domain.ErrTokenAlreadyUsed:
+				h.HandleError(c, domain.ErrTokenAlreadyUsed)
+			default:
+				h.HandleError(c, err)
+			}
+			return
+		}
+
+		err = h.service.VerifyPasswordRecoveryByCode(request.Code)
+		if err != nil {
+			switch err {
+			case domain.ErrVerificationTokenNotFound:
+				h.HandleError(c, domain.ErrVerificationTokenNotFound)
+			case domain.ErrTokenExpired:
+				h.HandleError(c, domain.ErrTokenExpired)
+			case domain.ErrTokenAlreadyUsed:
+				h.HandleError(c, domain.ErrTokenAlreadyUsed)
+			default:
+				h.HandleError(c, err)
+			}
+			return
+		}
+
+		err = h.service.RecoveryPassword(userID, request.NewPassword)
+		if err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		response := GenericResponse{
+			Status:  "success",
+			Message: "Password recovery completed successfully",
+		}
+
+		c.JSON(http.StatusOK, response)
 	}
 }
