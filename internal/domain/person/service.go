@@ -71,7 +71,7 @@ func NewService(repo Repository, notifier Notifier, tokenGenerator token.Generat
 
 func (s service) generateSecureVerificationToken(userID, tokenType string) (*UserToken, error) {
 	var rawToken string
-	var code *string
+	var code string
 	var hashedToken string
 
 	if tokenType == TokenTypePasswordRecovery {
@@ -84,7 +84,7 @@ func (s service) generateSecureVerificationToken(userID, tokenType string) (*Use
 		codeHasher := sha256.New()
 		codeHasher.Write([]byte(generatedCode))
 		hashedCode := hex.EncodeToString(codeHasher.Sum(nil))
-		code = &hashedCode
+		code = hashedCode
 
 		hashedToken = "password_recovery_placeholder_token_not_used_for_verification"
 
@@ -94,7 +94,6 @@ func (s service) generateSecureVerificationToken(userID, tokenType string) (*Use
 			return nil, err
 		}
 		rawToken = base64.URLEncoding.EncodeToString(tokenBytes)
-		code = nil
 
 		hasher := sha256.New()
 		hasher.Write([]byte(rawToken))

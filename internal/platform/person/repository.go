@@ -179,13 +179,12 @@ func (r *repository) GetVerificationTokenByHash(hashedToken string) error {
 	defer stmt.Close()
 
 	var token domain.UserToken
-	var code sql.NullString
 
 	err = stmt.QueryRow(hashedToken).Scan(
 		&token.ID,
 		&token.UserID,
 		&token.Token,
-		&code,
+		&token.Code,
 		&token.Type,
 		&token.ExpiresAt,
 		&token.Used,
@@ -295,7 +294,7 @@ func (r *repository) Save(person domain.Person) error {
 		IdentityNumber:      person.IdentityNumber,
 		FirstName:           person.FirstName,
 		LastName:            person.LastName,
-		SecondLastName:      *person.SecondLastName,
+		SecondLastName:      person.SecondLastName,
 		Email:               person.Email,
 		PhoneNumber:         person.PhoneNumber,
 		EmailVerified:       person.EmailVerified,
@@ -343,16 +342,11 @@ func (r *repository) SaveVerificationToken(token *domain.UserToken) error {
 	}
 	defer stmt.Close()
 
-	var code sql.NullString
-	if token.Code != nil {
-		code = sql.NullString{String: *token.Code, Valid: true}
-	}
-
 	_, err = stmt.Exec(
 		token.ID,
 		token.UserID,
 		token.Token,
-		code,
+		token.Code,
 		token.Type,
 		token.ExpiresAt,
 		token.Used,
@@ -410,7 +404,6 @@ func (r *repository) UpdatePassword(userID, hashedPassword string) error {
 	return nil
 }
 
-// TODO: Refactor this
 func (r *repository) GetTokenByHash(hashedCode, tokenType string) (*domain.UserToken, error) {
 
 	stmt, err := r.db.Prepare(queryGetTokenByHash)
@@ -421,13 +414,12 @@ func (r *repository) GetTokenByHash(hashedCode, tokenType string) (*domain.UserT
 	defer stmt.Close()
 
 	var token domain.UserToken
-	var code sql.NullString
 
 	err = stmt.QueryRow(hashedCode, tokenType).Scan(
 		&token.ID,
 		&token.UserID,
 		&token.Token,
-		&code,
+		&token.Code,
 		&token.Type,
 		&token.ExpiresAt,
 		&token.Used,
@@ -439,10 +431,6 @@ func (r *repository) GetTokenByHash(hashedCode, tokenType string) (*domain.UserT
 			return nil, domain.ErrVerificationTokenNotFound
 		}
 		return nil, domain.ErrGetVerificationToken
-	}
-
-	if code.Valid {
-		token.Code = &code.String
 	}
 
 	if time.Now().After(token.ExpiresAt) {
