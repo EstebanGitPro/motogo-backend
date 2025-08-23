@@ -98,7 +98,7 @@ func (p PersonUpdateRequest) ToDomain() domain.Person {
 	return domain.Person{
 		FirstName:      p.FirstName,
 		LastName:       p.LastName,
-		SecondLastName: &p.SecondLastName,
+		SecondLastName: p.SecondLastName,
 		PhoneNumber:    p.PhoneNumber,
 	}
 }
@@ -115,7 +115,7 @@ func (p PersonRequest) ToDomain() domain.Person {
 		IdentityNumber:      p.IdentityNumber,
 		FirstName:           p.FirstName,
 		LastName:            p.LastName,
-		SecondLastName:      &p.SecondLastName,
+		SecondLastName:      p.SecondLastName,
 		Email:               p.Email,
 		PhoneNumber:         p.PhoneNumber,
 		Password:            p.Password,
