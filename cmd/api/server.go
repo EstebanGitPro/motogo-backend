@@ -41,6 +41,7 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 		public.GET("/auth/verify-email/:token", handler.VerifyEmail())
 		public.GET("/email/status", handler.CheckEmailStatus())
 
+		public.POST("/auth/password-recovery/validate-code", handler.VerifyCode())
 		public.POST("/auth/password-recovery/send", handler.SendPasswordRecoveryEmail())
 		public.POST("/auth/password-recovery/reset", handler.RecoveryPassword())
 	}
