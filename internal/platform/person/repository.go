@@ -404,6 +404,7 @@ func (r *repository) UpdatePassword(userID, hashedPassword string) error {
 	return nil
 }
 
+
 func (r *repository) GetTokenByHash(hashedCode, tokenType string) (*domain.UserToken, error) {
 
 	stmt, err := r.db.Prepare(queryGetTokenByHash)

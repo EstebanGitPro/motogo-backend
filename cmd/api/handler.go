@@ -208,6 +208,19 @@ func (h *handler) Update() gin.HandlerFunc {
 	}
 }
 
+func (h handler) validateRecoveryCode(code string) (string, error) {
+	userID, err := h.service.GetUserIDFromRecoveryCode(code)
+	if err != nil {
+		return "", err
+	}
+
+	return userID, nil
+}
+
+
+
+
+
 func (h handler) SendPasswordRecoveryEmail() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var request SendPasswordRecoveryRequest
@@ -236,6 +249,29 @@ func (h handler) SendPasswordRecoveryEmail() func(c *gin.Context) {
 	}
 }
 
+func (h handler) VerifyCode() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var request ValidateRecoveryCodeRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			h.HandleError(c, ErrInvalidJSONFormat)
+			return
+		}
+
+		_, err := h.validateRecoveryCode(request.Code)
+		if err != nil {
+			h.HandleError(c, err)
+			return
+		}
+
+		response := GenericResponse{
+			Status:  "success",
+			Message: "code is valid",
+		}
+
+		c.JSON(http.StatusOK, response)
+	}
+}
+
 func (h handler) RecoveryPassword() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var request ResetPasswordRequest
@@ -244,34 +280,14 @@ func (h handler) RecoveryPassword() func(c *gin.Context) {
 			return
 		}
 
-		
-		userID, err := h.service.GetUserIDFromRecoveryCode(request.Code)
+		userID, err := h.validateRecoveryCode(request.Code)
 		if err != nil {
-			switch err {
-			case domain.ErrVerificationTokenNotFound:
-				h.HandleError(c, domain.ErrVerificationTokenNotFound)
-			case domain.ErrTokenExpired:
-				h.HandleError(c, domain.ErrTokenExpired)
-			case domain.ErrTokenAlreadyUsed:
-				h.HandleError(c, domain.ErrTokenAlreadyUsed)
-			default:
-				h.HandleError(c, err)
-			}
+			h.HandleError(c, err)
 			return
 		}
 
-		err = h.service.VerifyPasswordRecoveryByCode(request.Code)
-		if err != nil {
-			switch err {
-			case domain.ErrVerificationTokenNotFound:
-				h.HandleError(c, domain.ErrVerificationTokenNotFound)
-			case domain.ErrTokenExpired:
-				h.HandleError(c, domain.ErrTokenExpired)
-			case domain.ErrTokenAlreadyUsed:
-				h.HandleError(c, domain.ErrTokenAlreadyUsed)
-			default:
-				h.HandleError(c, err)
-			}
+		if err := h.service.CheckPasswordRecoveryByCode(request.Code); err != nil {
+			h.HandleError(c, err)
 			return
 		}
 

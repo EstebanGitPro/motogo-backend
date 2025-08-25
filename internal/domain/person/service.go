@@ -37,7 +37,7 @@ type Service interface {
 	GetPersonByEmail(email string) (*Person, error)
 	Save(person Person) (Person, error)
 	VerifyEmailByToken(tokenString string) error
-	VerifyPasswordRecoveryByCode(codeString string) error
+	CheckPasswordRecoveryByCode(codeString string) error
 	CleanupExpiredTokens() error
 	StartCleanupScheduler()
 	Login(person Person) (*Person, string, error)
@@ -45,7 +45,6 @@ type Service interface {
 	SendPasswordRecoveryEmail(email string) error
 	RecoveryPassword(userID, newPassword string) error
 	GetUserIDFromRecoveryCode(codeString string) (string, error)
-	
 }
 
 type Notifier interface {
@@ -210,7 +209,7 @@ func (s service) VerifyEmailByToken(tokenString string) error {
 	return err
 }
 
-func (s *service) VerifyPasswordRecoveryByCode(codeString string) error {
+func (s *service) CheckPasswordRecoveryByCode(codeString string) error {
 	hasher := sha256.New()
 	hasher.Write([]byte(codeString))
 	hashedCode := hex.EncodeToString(hasher.Sum(nil))
