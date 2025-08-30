@@ -1,13 +1,14 @@
 package api
 
 import (
-
 	"github.com/EstebanGitPro/motogo-backend/config"
-	"github.com/EstebanGitPro/motogo-backend/internal/domain/person"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/notification"
 	repo "github.com/EstebanGitPro/motogo-backend/internal/platform/person"
+	mysql"github.com/EstebanGitPro/motogo-backend/internal/platform/mysql"
+	"github.com/EstebanGitPro/motogo-backend/internal/domain/person"
+	
 )
 
 type Dependencies struct {
@@ -23,7 +24,7 @@ func initDependencies() (*Dependencies, error) {
 
 	cfg := config.MustLoadConfig()
 
-	db, err := repo.GetDB(cfg.Database)
+	db, err := mysql.GetDB(cfg.Database)
 	if err != nil {
 		return nil , err
 	}

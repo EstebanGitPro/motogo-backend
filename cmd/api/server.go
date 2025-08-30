@@ -22,7 +22,7 @@ func routing(app *gin.Engine, dependencies *Dependencies) {
 		return
 	}
 
-	templatePath := filepath.Join(moduleRoot, "cmd", "api", "template", "*")
+	templatePath := filepath.Join(moduleRoot, "tools", "template", "*")
 	slog.Debug("Template configuration", slog.String("template_path", templatePath))
 
 	app.LoadHTMLGlob(templatePath)

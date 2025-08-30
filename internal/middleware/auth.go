@@ -49,6 +49,7 @@ func JWTAuthMiddleware(cfg config.JWTConfig) gin.HandlerFunc {
 
 		c.Set("user_id", claims.ID)
 		c.Set("user_email", claims.Email)
+		//TODO: Add roles and permissions to claims and set them in context
 		
 		slog.Debug("User authenticated successfully",
 			slog.String("user_id", claims.ID),
