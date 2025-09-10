@@ -3,8 +3,6 @@ package person
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -13,44 +11,8 @@ import (
 
 	"github.com/EstebanGitPro/motogo-backend/config"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type Repository interface {
-	Save(person Person) error
-	GetPersonByEmail(email string) (*Person, error)
-	GetByID(id string) (*Person, error)
-	SaveVerificationToken(token *UserToken) error
-	GetVerificationTokenByHash(hashedToken string) error
-	MarkTokenAsUsedTx(tx *sql.Tx, tokenID string) error
-	MarkEmailAsVerifiedTx(tx *sql.Tx, userID string) error
-	CleanupExpiredTokens() error
-	Update(id string, person Person) error
-	UpdatePassword(userID, hashedPassword string) error
-	GetTokenByHash(hashedToken, tokenType string) (*UserToken, error)
-	ConsumePasswordRecoveryToken(codeString string) (string, error)
-}
-
-type Service interface {
-	GetByID(id string) (*Person, error)
-	GetPersonByEmail(email string) (*Person, error)
-	Save(person Person) (Person, error)
-	VerifyEmailByToken(tokenString string) error
-	CheckPasswordRecoveryByCode(codeString string) error
-	CleanupExpiredTokens() error
-	StartCleanupScheduler()
-	Login(person Person) (*Person, string, error)
-	Update(id string, person Person) error
-	SendPasswordRecoveryEmail(email string) error
-	RecoveryPassword(userID, newPassword string) error
-	GetUserIDFromRecoveryCode(codeString string) (string, error)
-}
-
-type Notifier interface {
-	SendVerificationEmail(email string, verificationLink string) error
-	SendPasswordRecoveryEmail(email string, recoveryCode string) error
-}
 
 type service struct {
 	repository     Repository
@@ -68,63 +30,7 @@ func NewService(repo Repository, notifier Notifier, tokenGenerator token.Generat
 	}
 }
 
-func (s service) generateSecureVerificationToken(userID, tokenType string) (*UserToken, error) {
-	var rawToken string
-	var code string
-	var hashedToken string
 
-	if tokenType == TokenTypePasswordRecovery {
-		generatedCode, err := generateSecureCode(6)
-		if err != nil {
-			return nil, err
-		}
-		rawToken = generatedCode
-
-		codeHasher := sha256.New()
-		codeHasher.Write([]byte(generatedCode))
-		hashedCode := hex.EncodeToString(codeHasher.Sum(nil))
-		code = hashedCode
-
-		hashedToken = "password_recovery_placeholder_token_not_used_for_verification"
-
-	} else {
-		tokenBytes := make([]byte, 32)
-		if _, err := rand.Read(tokenBytes); err != nil {
-			return nil, err
-		}
-		rawToken = base64.URLEncoding.EncodeToString(tokenBytes)
-
-		hasher := sha256.New()
-		hasher.Write([]byte(rawToken))
-		hashedToken = hex.EncodeToString(hasher.Sum(nil))
-	}
-
-	var expiration time.Duration
-	if tokenType == TokenTypePasswordRecovery {
-		expiration = 15 * time.Minute
-	} else {
-		expiration = 10 * time.Minute
-	}
-
-	verificationToken := &UserToken{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		Token:     hashedToken,
-		Code:      code,
-		Type:      tokenType,
-		ExpiresAt: time.Now().UTC().Add(expiration),
-		Used:      false,
-		CreatedAt: time.Now().UTC(),
-	}
-
-	if err := s.repository.SaveVerificationToken(verificationToken); err != nil {
-		return nil, err
-	}
-
-	verificationToken.RawToken = rawToken
-
-	return verificationToken, nil
-}
 
 func (p Person) comparePassword(password string) error {
 	err := bcrypt.CompareHashAndPassword([]byte(p.Password), []byte(password))
@@ -159,41 +65,6 @@ func generateSecureCode(length int) (string, error) {
 	}
 
 	return string(code), nil
-}
-
-func (s service) Save(person Person) (Person, error) {
-
-	existingPerson, err := s.repository.GetPersonByEmail(person.Email)
-	if err == nil && existingPerson != nil {
-		return Person{}, ErrDuplicateUser
-	}
-
-	person.setID()
-	if err := person.hashPassword(); err != nil {
-		return Person{}, err
-	}
-
-	err = s.repository.Save(person)
-	if err != nil {
-		return Person{}, err
-	}
-
-	verificationToken, err := s.generateSecureVerificationToken(person.ID, TokenTypeEmailVerification)
-	if err != nil {
-		return Person{}, err
-	}
-
-	verificationLink := fmt.Sprintf("%s/v1/motogo/auth/verify-email/%s",
-		s.config.Verification.BaseURL,
-		verificationToken.RawToken)
-
-	err = s.notifier.SendVerificationEmail(person.Email, verificationLink)
-	if err != nil {
-
-		log.Printf("Error sending verification email to %s: %v", person.Email, err)
-	}
-
-	return person, nil
 }
 
 func (s service) VerifyEmailByToken(tokenString string) error {

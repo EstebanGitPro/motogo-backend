@@ -1,12 +1,13 @@
 package api
 
 import (
-
 	"github.com/EstebanGitPro/motogo-backend/config"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/person"
 	"github.com/EstebanGitPro/motogo-backend/internal/domain/token"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/jwt"
+	"github.com/EstebanGitPro/motogo-backend/internal/platform/logger"
 	"github.com/EstebanGitPro/motogo-backend/internal/platform/notification"
+	"github.com/EstebanGitPro/motogo-backend/internal/platform/template"
 	repo "github.com/EstebanGitPro/motogo-backend/internal/platform/person"
 )
 
@@ -16,6 +17,7 @@ type Dependencies struct {
 	Notifier      person.Notifier
 	Config        *config.Config
 	JwtGenerator  token.Generator
+	Logger        logger.Logger
 }
 
 func initDependencies() (*Dependencies, error) {
@@ -30,7 +32,16 @@ func initDependencies() (*Dependencies, error) {
 
 	personRepo := repo.NewRepository(db)
 
-	resendNotifier, err := notification.NewResendNotifier(cfg.Resend.APIKey, cfg.Resend.FromEmail)
+	// Crear logger
+	appLogger := logger.NewSlogLogger()
+
+	// Crear template manager
+	templateManager, err := template.NewTemplateManager()
+	if err != nil {
+		return nil, err
+	}
+
+	resendNotifier, err := notification.NewResendNotifier(cfg.Resend.APIKey, cfg.Resend.FromEmail, appLogger, templateManager)
 	if err != nil {
 		return nil, err
 	}
@@ -45,5 +56,6 @@ func initDependencies() (*Dependencies, error) {
 		Notifier:      resendNotifier,
 		Config:        cfg,
 		JwtGenerator:  jwtGenerator,
+		Logger:        appLogger,
 	}, nil
 }
